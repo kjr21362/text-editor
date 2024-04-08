@@ -60,6 +60,32 @@ public class Main {
             clearScreen();
             System.exit(0);
         }
+        if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
+            moveCursor(key);
+        } else if (key == PAGE_UP || key == PAGE_DOWN) {
+            if (key == PAGE_UP) {
+                cy = yOffset;
+            } else if (key == PAGE_DOWN) {
+                cy = yOffset + ROWS - 1;
+            }
+            for (int i = 0; i < ROWS; i++) {
+                moveCursor(key == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+            }
+        } else if (key == HOME_KEY) {
+            cx = 0;
+        } else if (key == END_KEY) {
+            cx = COLUMNS - 1;
+        } else if (key == DELETE_KEY) {
+            // nothing
+        }
+
+        // reposition cursor to end of line if it was out of range
+        if (cy < content.size() && cx > content.get(cy).length()) {
+            cx = content.get(cy).length();
+        }
+    }
+
+    private static void moveCursor(int key) {
         // moves the cursor based on the arrow key input
         if (key == ARROW_UP) {
             if (cy > 0) {
@@ -74,32 +100,17 @@ public class Main {
                 cx--;
             } else if (cy > 0) {
                 // arrow left at the beginning of line goes to end of previous line
-                cy --;
+                cy--;
                 cx = content.get(cy).length();
             }
         } else if (key == ARROW_RIGHT) {
-            if(cx < content.get(cy).length()) { // cannot scroll pass end of line
+            if (cx < content.get(cy).length()) { // cannot scroll pass end of line
                 cx++;
             } else if (cy < content.size()) {
                 // arrow right at the end of line goes to beginning of next line
-                cy ++;
+                cy++;
                 cx = 0;
             }
-        } else if (key == PAGE_UP) {
-            cy = 0;
-        } else if (key == PAGE_DOWN) {
-            cx = 0;
-        } else if (key == HOME_KEY) {
-            cx = 0;
-        } else if (key == END_KEY) {
-            cx = COLUMNS - 1;
-        } else if (key == DELETE_KEY) {
-            // nothing
-        }
-
-        // reposition cursor to end of line if it was out of range
-        if(cy < content.size() && cx > content.get(cy).length()){
-            cx = content.get(cy).length();
         }
     }
 
@@ -202,12 +213,14 @@ public class Main {
             } else {
                 // prints content
                 String line = content.get(fileRow);
-                int drawLen =  line.length() - xOffset;
-                if(drawLen < 0) drawLen = 0;
-                if(drawLen > COLUMNS){
+                int drawLen = line.length() - xOffset;
+                if (drawLen < 0) {
+                    drawLen = 0;
+                }
+                if (drawLen > COLUMNS) {
                     drawLen = COLUMNS;
                 }
-                if(drawLen > 0) {
+                if (drawLen > 0) {
                     builder.append(line, xOffset, xOffset + drawLen);
                 }
             }
