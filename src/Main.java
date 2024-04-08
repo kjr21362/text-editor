@@ -63,11 +63,13 @@ public class Main {
         if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
             moveCursor(key);
         } else if (key == PAGE_UP || key == PAGE_DOWN) {
+            // position the cursor to the top/or bottom of window
             if (key == PAGE_UP) {
                 cy = yOffset;
             } else if (key == PAGE_DOWN) {
                 cy = yOffset + ROWS - 1;
             }
+            // then move the cursor up/or down
             for (int i = 0; i < ROWS; i++) {
                 moveCursor(key == PAGE_UP ? ARROW_UP : ARROW_DOWN);
             }
