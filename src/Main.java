@@ -1,6 +1,11 @@
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Stream;
 
 public class Main {
     private static final int CTRL_Q = 17;
@@ -14,17 +19,37 @@ public class Main {
 
     // cursor position
     private static int cx, cy;
-    public static String originalTerminalSettings;
+
+    // file row offset, relative to the top of file
+    private static int yOffset;
+    private static int xOffset;
+    private static String originalTerminalSettings;
+
+    private static List<String> content = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
 
         enableRawMode();
         initEditor();
+        if (args.length > 0) {
+            editorOpen(args[0]);
+        }
 
         while (true) {
             refreshScreen();
             int key = readKey();
             handleKey(key);
+        }
+    }
+
+    private static void editorOpen(String file) {
+        Path path = Path.of(file);
+        if (Files.exists(path)) {
+            try (Stream<String> stream = Files.lines(path)) {
+                content = stream.toList();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -41,16 +66,24 @@ public class Main {
                 cy--;
             }
         } else if (key == ARROW_DOWN) {
-            if (cy < ROWS - 1) {
+            if (cy < content.size()) {
                 cy++;
             }
         } else if (key == ARROW_LEFT) {
             if (cx > 0) {
                 cx--;
+            } else if (cy > 0) {
+                // arrow left at the beginning of line goes to end of previous line
+                cy --;
+                cx = content.get(cy).length();
             }
         } else if (key == ARROW_RIGHT) {
-            if (cx < COLUMNS - 1) {
+            if(cx < content.get(cy).length()) { // cannot scroll pass end of line
                 cx++;
+            } else if (cy < content.size()) {
+                // arrow right at the end of line goes to beginning of next line
+                cy ++;
+                cx = 0;
             }
         } else if (key == PAGE_UP) {
             cy = 0;
@@ -62,6 +95,11 @@ public class Main {
             cx = COLUMNS - 1;
         } else if (key == DELETE_KEY) {
             // nothing
+        }
+
+        // reposition cursor to end of line if it was out of range
+        if(cy < content.size() && cx > content.get(cy).length()){
+            cx = content.get(cy).length();
         }
     }
 
@@ -77,8 +115,8 @@ public class Main {
         }
 
         int nextKey = System.in.read();
-        
-        if(nextKey == '[') {
+
+        if (nextKey == '[') {
             int thirdKey = System.in.read();
             switch (thirdKey) {
                 case 'A':
@@ -119,7 +157,7 @@ public class Main {
             }
         } else if (nextKey == 'O') {
             int thirdKey = System.in.read();
-            switch (thirdKey){
+            switch (thirdKey) {
                 case 'H':
                     return HOME_KEY;
                 case 'F':
@@ -128,7 +166,7 @@ public class Main {
                     return thirdKey;
             }
         }
-        
+
         return nextKey;
     }
 
@@ -139,32 +177,70 @@ public class Main {
 
     private static void initEditor() {
         int[] size = getWindowSize();
-        ROWS = size[0];
+        ROWS = size[0] - 1;
         COLUMNS = size[1];
 
         cx = 0;
         cy = 0;
+        xOffset = 0;
+        yOffset = 0;
     }
 
     private static void refreshScreen() {
+        editorScroll();
         StringBuilder builder = new StringBuilder();
         builder.append("\033[?25l"); // hides the cursor
         //builder.append("\033[2J"); // clears entire screen
         builder.append("\033[H");  // moves cursor to row 1 column 1 (top left)
         builder.append("\033[K"); // clears line
 
-        for (int r = 0; r < ROWS - 1; r++) {
-            builder.append("~\r\n");
+        for (int r = 0; r < ROWS; r++) {
+            int fileRow = r + yOffset;
+            if (fileRow >= content.size()) {
+                // prints ~ for empty line
+                builder.append("~");
+            } else {
+                // prints content
+                String line = content.get(fileRow);
+                int drawLen =  line.length() - xOffset;
+                if(drawLen < 0) drawLen = 0;
+                if(drawLen > COLUMNS){
+                    drawLen = COLUMNS;
+                }
+                if(drawLen > 0) {
+                    builder.append(line, xOffset, xOffset + drawLen);
+                }
+            }
+            builder.append("\r\n");
             builder.append("\033[K"); // clears line
         }
 
         builder.append("Editor - v0.0.1");
 
-        builder.append(String.format("\033[%d;%dH", cy + 1,
-            cx + 1));  // moves the cursor
+        builder.append(String.format("\033[%d;%dH", cy - yOffset + 1,
+            cx - xOffset + 1));  // moves the cursor
         builder.append("\033[?25h"); // shows the cursor
 
         System.out.print(builder);
+    }
+
+    private static void editorScroll() {
+        // if the cursor is above the visible window, scroll up
+        if (cy < yOffset) {
+            yOffset = cy;
+        }
+        // if the cursor is below the bottom of visible window, scroll down
+        if (cy >= yOffset + ROWS) {
+            yOffset = cy - ROWS + 1;
+        }
+
+        // horizontal scrolling
+        if (cx < xOffset) {
+            xOffset = cx;
+        }
+        if (cx >= xOffset + COLUMNS) {
+            xOffset = cx - COLUMNS + 1;
+        }
     }
 
     public static void enableRawMode() {
