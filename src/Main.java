@@ -74,7 +74,7 @@ public class Main {
         } else if (key == HOME_KEY) {
             cx = 0;
         } else if (key == END_KEY) {
-            cx = COLUMNS - 1;
+            cx = content.get(cy).length();
         } else if (key == DELETE_KEY) {
             // nothing
         }
