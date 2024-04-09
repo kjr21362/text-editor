@@ -5,12 +5,14 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Main {
     private static final int CTRL_Q = 17;
     private static final int ARROW_UP = 1000, ARROW_DOWN = 1001, ARROW_LEFT = 1002, ARROW_RIGHT =
-        1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008;
+        1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
+        BACKSPACE = 127;
 
     // screen height
     private static int ROWS;
@@ -24,7 +26,7 @@ public class Main {
     private static int yOffset;
     private static int xOffset;
     private static String originalTerminalSettings;
-
+    private static String debugStr;
     private static List<String> content = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
@@ -35,9 +37,11 @@ public class Main {
             editorOpen(args[0]);
         }
 
+        int key = 0;
         while (true) {
+            debugStr = String.format("cx: %d, cy: %d, key: %d", cx, cy, key);
             refreshScreen();
-            int key = readKey();
+            key = readKey();
             handleKey(key);
         }
     }
@@ -46,11 +50,27 @@ public class Main {
         Path path = Path.of(file);
         if (Files.exists(path)) {
             try (Stream<String> stream = Files.lines(path)) {
-                content = stream.toList();
+                content = stream.collect(Collectors.toList());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    private static void insertChar(int c) {
+        if (cy == content.size()) {
+            content.add("");
+        }
+        int at = cx;
+        String row = content.get(cy);
+        if (at < 0 || at > row.length()) {
+            at = row.length();
+        }
+        StringBuilder builder = new StringBuilder(row);
+        builder.insert(at, (char) c);
+
+        content.set(cy, builder.toString());
+        cx++;
     }
 
     private static void handleKey(int key) {
@@ -79,6 +99,14 @@ public class Main {
             cx = content.get(cy).length();
         } else if (key == DELETE_KEY) {
             // nothing
+        } else if (key == '\r') { // enter key
+            // nothing
+        } else if (key == BACKSPACE) {
+            // nothing
+        } else if (key == '\033') { // escape key
+            // nothing
+        } else {
+            insertChar(key);
         }
 
         // reposition cursor to end of line if it was out of range
@@ -106,7 +134,8 @@ public class Main {
                 cx = content.get(cy).length();
             }
         } else if (key == ARROW_RIGHT) {
-            if (cx < content.get(cy).length()) { // cannot scroll pass end of line
+            if (cy < content.size() &&
+                cx < content.get(cy).length()) { // cannot scroll pass end of line
                 cx++;
             } else if (cy < content.size()) {
                 // arrow right at the end of line goes to beginning of next line
@@ -230,7 +259,7 @@ public class Main {
             builder.append("\033[K"); // clears line
         }
 
-        builder.append("Editor - v0.0.1");
+        builder.append("Editor - v0.0.1" + ", " + debugStr);
 
         builder.append(String.format("\033[%d;%dH", cy - yOffset + 1,
             cx - xOffset + 1));  // moves the cursor
