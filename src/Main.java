@@ -26,10 +26,13 @@ public class Main {
     private static int yOffset;
     private static int xOffset;
     private static String originalTerminalSettings;
-    private static String debugStr;
+    private static String statusMessage;
     private static List<String> content = new ArrayList<>();
 
     private static String fileName;
+
+    // if the file has been modified
+    private static boolean dirty = false;
 
     public static void main(String[] args) throws IOException {
 
@@ -42,7 +45,10 @@ public class Main {
 
         int key = 0;
         while (true) {
-            debugStr = String.format("cx: %d, cy: %d, key: %d", cx, cy, key);
+            statusMessage = String.format("cx: %d, cy: %d, key: %d", cx, cy, key);
+            if(dirty){
+                statusMessage += " modified";
+            }
             refreshScreen();
             key = readKey();
             handleKey(key);
@@ -54,6 +60,7 @@ public class Main {
         if (Files.exists(path)) {
             try (Stream<String> stream = Files.lines(path)) {
                 content = stream.collect(Collectors.toList());
+                dirty = false;
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -68,6 +75,7 @@ public class Main {
             for(String line: content){
                 Files.writeString(path, line + System.lineSeparator(), StandardOpenOption.APPEND);
             }
+            dirty = false;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -87,6 +95,7 @@ public class Main {
 
         content.set(cy, builder.toString());
         cx++;
+        dirty = true;
     }
 
     private static void handleKey(int key) {
@@ -280,7 +289,7 @@ public class Main {
             builder.append("\033[K"); // clears line
         }
 
-        builder.append("Editor - v0.0.1" + ", " + debugStr);
+        builder.append("Editor - v0.0.1" + ", " + statusMessage);
 
         builder.append(String.format("\033[%d;%dH", cy - yOffset + 1,
             cx - xOffset + 1));  // moves the cursor
