@@ -14,6 +14,11 @@ public class Main {
         1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
         BACKSPACE = 127;
 
+    // Number of extra ctrl-q action needed to exit the application,
+    // when the file is modified.
+    private static final int QUIT_TIMES = 1;
+    private static int quitTimes = QUIT_TIMES;
+
     // screen height
     private static int ROWS;
     // screen width
@@ -43,14 +48,9 @@ public class Main {
             editorOpen(fileName);
         }
 
-        int key = 0;
         while (true) {
-            statusMessage = String.format("cx: %d, cy: %d, key: %d", cx, cy, key);
-            if(dirty){
-                statusMessage += " modified";
-            }
             refreshScreen();
-            key = readKey();
+            int key = readKey();
             handleKey(key);
         }
     }
@@ -101,6 +101,11 @@ public class Main {
     private static void handleKey(int key) {
         // ctrl-q to exit
         if (key == ctrl_key('q')) {
+            if(dirty && quitTimes > 0){
+                statusMessage = String.format("File has unsaved changes. Press Ctrl-Q %d times to quit.", quitTimes);
+                quitTimes --;
+                return;
+            }
             disableRawMode();
             clearScreen();
             System.exit(0);
@@ -135,9 +140,16 @@ public class Main {
             insertChar(key);
         }
 
+        quitTimes = QUIT_TIMES;
+
         // reposition cursor to end of line if it was out of range
         if (cy < content.size() && cx > content.get(cy).length()) {
             cx = content.get(cy).length();
+        }
+
+        statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
+        if(dirty){
+            statusMessage += " modified";
         }
     }
 
@@ -256,6 +268,8 @@ public class Main {
         cy = 0;
         xOffset = 0;
         yOffset = 0;
+
+        statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
     }
 
     private static void refreshScreen() {
@@ -289,7 +303,7 @@ public class Main {
             builder.append("\033[K"); // clears line
         }
 
-        builder.append("Editor - v0.0.1" + ", " + statusMessage);
+        builder.append(statusMessage);
 
         builder.append(String.format("\033[%d;%dH", cy - yOffset + 1,
             cx - xOffset + 1));  // moves the cursor
