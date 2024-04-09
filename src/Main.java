@@ -98,6 +98,55 @@ public class Main {
         dirty = true;
     }
 
+    private static void insertRow() {
+        if(cx == 0){
+            content.add(cy, "");
+        } else if(cx == content.get(cy).length()) {
+            content.add(cy+1, "");
+            cx = 0;
+        } else {
+            String line = content.get(cy);
+            content.add(cy+1, line.substring(cx));
+            content.set(cy, line.substring(0, cx));
+            cx = 0;
+        }
+
+        cy ++;
+        dirty = true;
+    }
+
+    // deletes the char to the left of cursor
+    private static void deleteChar() {
+        if(cy == content.size()) return;
+        if(cx == 0 && cy == 0) return;
+
+        if(cx > 0) {
+            int at = cx - 1;
+            String line = content.get(cy);
+            if (at < 0 || at >= line.length()) {
+                return;
+            }
+            line = line.substring(0, at) + line.substring(at + 1);
+            content.set(cy, line);
+            cx --;
+            dirty = true;
+        } else {
+            String line = content.get(cy);
+            deleteRow(cy);
+            cy --;
+            cx = content.get(cy).length();
+            content.set(cy, content.get(cy) + line);
+            dirty = true;
+        }
+    }
+
+    private static void deleteRow(int at) {
+        if(at < 0 || at >= content.size()) return;
+
+        content.remove(at);
+        dirty = true;
+    }
+
     private static void handleKey(int key) {
         // ctrl-q to exit
         if (key == ctrl_key('q')) {
@@ -129,11 +178,12 @@ public class Main {
         } else if (key == END_KEY) {
             cx = content.get(cy).length();
         } else if (key == DELETE_KEY) {
-            // nothing
+            moveCursor(ARROW_RIGHT);
+            deleteChar();
         } else if (key == '\r') { // enter key
-            // nothing
+            insertRow();
         } else if (key == BACKSPACE) {
-            // nothing
+            deleteChar();
         } else if (key == '\033') { // escape key
             // nothing
         } else {
