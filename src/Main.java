@@ -2,6 +2,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -9,7 +10,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Main {
-    private static final int CTRL_Q = 17;
     private static final int ARROW_UP = 1000, ARROW_DOWN = 1001, ARROW_LEFT = 1002, ARROW_RIGHT =
         1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
         BACKSPACE = 127;
@@ -29,12 +29,15 @@ public class Main {
     private static String debugStr;
     private static List<String> content = new ArrayList<>();
 
+    private static String fileName;
+
     public static void main(String[] args) throws IOException {
 
         enableRawMode();
         initEditor();
         if (args.length > 0) {
-            editorOpen(args[0]);
+            fileName = args[0];
+            editorOpen(fileName);
         }
 
         int key = 0;
@@ -57,6 +60,19 @@ public class Main {
         }
     }
 
+    private static void editorSave(String file){
+        Path path = Path.of(file);
+        try {
+            Files.deleteIfExists(path);
+            Files.createFile(path);
+            for(String line: content){
+                Files.writeString(path, line + System.lineSeparator(), StandardOpenOption.APPEND);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static void insertChar(int c) {
         if (cy == content.size()) {
             content.add("");
@@ -75,12 +91,13 @@ public class Main {
 
     private static void handleKey(int key) {
         // ctrl-q to exit
-        if (key == CTRL_Q) {
+        if (key == ctrl_key('q')) {
             disableRawMode();
             clearScreen();
             System.exit(0);
-        }
-        if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
+        } else if (key == ctrl_key('s')) {
+            editorSave(fileName);
+        }else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
             moveCursor(key);
         } else if (key == PAGE_UP || key == PAGE_DOWN) {
             // position the cursor to the top/or bottom of window
@@ -143,6 +160,10 @@ public class Main {
                 cx = 0;
             }
         }
+    }
+
+    private static int ctrl_key(int key){
+        return key & 0x1f;
     }
 
     private static int readKey() throws IOException {
