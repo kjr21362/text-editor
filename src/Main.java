@@ -40,13 +40,13 @@ public class Main {
     private static boolean dirty = false;
 
     public static void main(String[] args) throws IOException {
+        if (args.length > 0) {
+            fileName = args[0];
+        }
 
         enableRawMode();
         initEditor();
-        if (args.length > 0) {
-            fileName = args[0];
-            editorOpen(fileName);
-        }
+        editorOpen(fileName);
 
         while (true) {
             refreshScreen();
@@ -56,6 +56,8 @@ public class Main {
     }
 
     private static void editorOpen(String file) {
+        if(file == null || file.isEmpty()) return;
+
         Path path = Path.of(file);
         if (Files.exists(path)) {
             try (Stream<String> stream = Files.lines(path)) {
@@ -67,17 +69,50 @@ public class Main {
         }
     }
 
-    private static void editorSave(String file){
-        Path path = Path.of(file);
+    private static void editorSave(){
+        if(fileName == null){
+            fileName = editorPrompt("Save as: ");
+            if(fileName == null){
+                statusMessage = "Save canceled";
+                return;
+            }
+        }
+        Path path = Path.of(fileName);
         try {
             Files.deleteIfExists(path);
             Files.createFile(path);
             for(String line: content){
                 Files.writeString(path, line + System.lineSeparator(), StandardOpenOption.APPEND);
             }
+            statusMessage = "File saved!";
             dirty = false;
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private static String editorPrompt(String prompt) {
+        StringBuilder input = new StringBuilder();
+        
+        while(true) {
+            statusMessage = prompt + input;
+            refreshScreen();
+
+            try {
+                int key = System.in.read();
+                if(key == '\033'){
+                    statusMessage = "";
+                    return null;
+                }else if(key == '\r') { // enter key
+                    if(input.length() > 0){
+                        return input.toString();
+                    }
+                } else if (key >= 32 && key < 128) {
+                    input.append((char)key);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -159,7 +194,8 @@ public class Main {
             clearScreen();
             System.exit(0);
         } else if (key == ctrl_key('s')) {
-            editorSave(fileName);
+            editorSave();
+            return;
         }else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
             moveCursor(key);
         } else if (key == PAGE_UP || key == PAGE_DOWN) {
@@ -198,6 +234,9 @@ public class Main {
         }
 
         statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
+        if(fileName != null){
+            statusMessage += " " + fileName;
+        }
         if(dirty){
             statusMessage += " modified";
         }
@@ -320,6 +359,9 @@ public class Main {
         yOffset = 0;
 
         statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
+        if(fileName != null){
+            statusMessage += " " + fileName;
+        }
     }
 
     private static void refreshScreen() {
