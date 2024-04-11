@@ -18,6 +18,9 @@ public class Main {
     // Number of extra ctrl-q action needed to exit the application,
     // when the file is modified.
     private static final int QUIT_TIMES = 1;
+    private static final int DIRECTION_FORWARD = 1, DIRECTION_BACKWARD = -1;
+
+    private static int lastMatchRow = -1, direction = DIRECTION_FORWARD;
     private static int quitTimes = QUIT_TIMES;
 
     // screen height
@@ -97,7 +100,7 @@ public class Main {
     private static void editorFind() {
         int savedCx = cx, savecCy = cy;
         String query = editorPrompt("Search (ESC to cancel): ", getEditFindConsumer());
-        if(query == null) {
+        if (query == null) {
             // search is canceled, restore cursor position
             cx = savedCx;
             cy = savecCy;
@@ -106,15 +109,35 @@ public class Main {
 
     private static BiConsumer<String, Integer> getEditFindConsumer() {
         BiConsumer<String, Integer> editFind = (query, key) -> {
-            if(key == '\033' || key == '\r') return;
+
+            if (key == '\033' || key == '\r') {
+                lastMatchRow = -1;
+                direction = DIRECTION_FORWARD;
+                return;
+            } else if (key == ARROW_UP || key == ARROW_LEFT) {
+                direction = DIRECTION_BACKWARD;
+            } else if (key == ARROW_DOWN || key == ARROW_RIGHT) {
+                direction = DIRECTION_FORWARD;
+            } else {
+                lastMatchRow = -1;
+                direction = DIRECTION_FORWARD;
+            }
 
             int col;
-            for(int i=0; i<content.size(); i++){
-                String line = content.get(i);
+            int currentRow = lastMatchRow;
+            for (int i = 0; i < content.size(); i++) {
+                currentRow += direction;
+                if (currentRow < 0) {
+                    currentRow = content.size() - 1;
+                } else if (currentRow == content.size()) {
+                    currentRow = 0;
+                }
+                String line = content.get(currentRow);
                 col = line.indexOf(query);
-                if(col > -1){
+                if (col > -1) {
+                    lastMatchRow = currentRow;
                     cx = col;
-                    cy = i;
+                    cy = currentRow;
                     return;
                 }
             }
@@ -131,28 +154,29 @@ public class Main {
             refreshScreen();
 
             try {
-                int key = System.in.read();
+                int key = readKey();
+                // TODO: BUG: when in search mode, need to press ESC twice to exit
                 if (key == '\033') {
                     statusMessage = "";
-                    if(callback != null){
+                    if (callback != null) {
                         callback.accept(input.toString(), key);
                     }
                     return null;
                 } else if (key == '\r') { // enter key
                     if (input.length() > 0) {
-                        if(callback != null){
+                        if (callback != null) {
                             callback.accept(input.toString(), key);
                         }
                         return input.toString();
                     }
                 } else if (key == BACKSPACE) {
-                    if(input.length() > 0){
-                        input.deleteCharAt(input.length()-1);
+                    if (input.length() > 0) {
+                        input.deleteCharAt(input.length() - 1);
                     }
                 } else if (key >= 32 && key < 128) {
                     input.append((char) key);
                 }
-                if(callback != null){
+                if (callback != null) {
                     callback.accept(input.toString(), key);
                 }
             } catch (IOException e) {
