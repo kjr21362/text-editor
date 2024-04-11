@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
@@ -14,6 +15,11 @@ public class Main {
     private static final int ARROW_UP = 1000, ARROW_DOWN = 1001, ARROW_LEFT = 1002, ARROW_RIGHT =
         1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
         BACKSPACE = 127;
+
+    private enum HIGHLIGHT {
+        HL_NORMAL,
+        HL_NUMBER;
+    }
 
     // Number of extra ctrl-q action needed to exit the application,
     // when the file is modified.
@@ -37,6 +43,7 @@ public class Main {
     private static String originalTerminalSettings;
     private static String statusMessage;
     private static List<String> content = new ArrayList<>();
+    private static List<List<HIGHLIGHT>> highlightedContent = new ArrayList<>();
 
     private static String fileName;
 
@@ -181,6 +188,31 @@ public class Main {
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private static void editorUpdateSyntax() {
+        highlightedContent = new ArrayList<>();
+        for(String line: content){
+            List<HIGHLIGHT> highlightedLine =
+                new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
+            for(int i=0; i<line.length(); i++){
+                if(Character.isDigit(line.charAt(i))){
+                    highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
+                }
+            }
+            highlightedContent.add(highlightedLine);
+        }
+    }
+
+    private static int editorSyntaxToColor(HIGHLIGHT highlight) {
+        switch (highlight){
+            case HL_NUMBER -> {
+                return 31; // fg red
+            }
+            default -> {
+                return 37; // fg white
             }
         }
     }
@@ -445,6 +477,7 @@ public class Main {
 
     private static void refreshScreen() {
         editorScroll();
+        editorUpdateSyntax();
         StringBuilder builder = new StringBuilder();
         builder.append("\033[?25l"); // hides the cursor
         //builder.append("\033[2J"); // clears entire screen
@@ -467,7 +500,25 @@ public class Main {
                     drawLen = COLUMNS;
                 }
                 if (drawLen > 0) {
-                    builder.append(line, xOffset, xOffset + drawLen);
+                    int currentColor = -1;
+                    List<HIGHLIGHT> highlightedLine = highlightedContent.get(fileRow);
+                    for(int i=xOffset; i< xOffset + drawLen; i++){
+                        if(highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL){
+                            if(currentColor != -1) {
+                                builder.append("\033[39m");
+                                currentColor = -1;
+                            }
+                        } else {
+                            int color = editorSyntaxToColor(highlightedLine.get(i));
+                            if(color != currentColor) {
+                                currentColor = color;
+                                builder.append(String.format("\033[%dm", color));
+                            }
+                        }
+                        builder.append(line.charAt(i));
+                    }
+                    builder.append("\033[39m"); // resets color
+                    //builder.append(line, xOffset, xOffset + drawLen);
                 }
             }
             builder.append("\r\n");
