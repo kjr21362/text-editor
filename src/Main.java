@@ -95,7 +95,13 @@ public class Main {
     }
 
     private static void editorFind() {
-        editorPrompt("Search (ESC to cancel): ", getEditFindConsumer());
+        int savedCx = cx, savecCy = cy;
+        String query = editorPrompt("Search (ESC to cancel): ", getEditFindConsumer());
+        if(query == null) {
+            // search is canceled, restore cursor position
+            cx = savedCx;
+            cy = savecCy;
+        }
     }
 
     private static BiConsumer<String, Integer> getEditFindConsumer() {
