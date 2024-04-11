@@ -6,6 +6,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -56,7 +57,9 @@ public class Main {
     }
 
     private static void editorOpen(String file) {
-        if(file == null || file.isEmpty()) return;
+        if (file == null || file.isEmpty()) {
+            return;
+        }
 
         Path path = Path.of(file);
         if (Files.exists(path)) {
@@ -69,10 +72,10 @@ public class Main {
         }
     }
 
-    private static void editorSave(){
-        if(fileName == null){
-            fileName = editorPrompt("Save as: ");
-            if(fileName == null){
+    private static void editorSave() {
+        if (fileName == null) {
+            fileName = editorPrompt("Save as: ", null);
+            if (fileName == null) {
                 statusMessage = "Save canceled";
                 return;
             }
@@ -81,7 +84,7 @@ public class Main {
         try {
             Files.deleteIfExists(path);
             Files.createFile(path);
-            for(String line: content){
+            for (String line : content) {
                 Files.writeString(path, line + System.lineSeparator(), StandardOpenOption.APPEND);
             }
             statusMessage = "File saved!";
@@ -91,24 +94,60 @@ public class Main {
         }
     }
 
-    private static String editorPrompt(String prompt) {
+    private static void editorFind() {
+        editorPrompt("Search (ESC to cancel): ", getEditFindConsumer());
+    }
+
+    private static BiConsumer<String, Integer> getEditFindConsumer() {
+        BiConsumer<String, Integer> editFind = (query, key) -> {
+            if(key == '\033' || key == '\r') return;
+
+            int col;
+            for(int i=0; i<content.size(); i++){
+                String line = content.get(i);
+                col = line.indexOf(query);
+                if(col > -1){
+                    cx = col;
+                    cy = i;
+                    return;
+                }
+            }
+        };
+
+        return editFind;
+    }
+
+    private static String editorPrompt(String prompt, BiConsumer<String, Integer> callback) {
         StringBuilder input = new StringBuilder();
-        
-        while(true) {
+
+        while (true) {
             statusMessage = prompt + input;
             refreshScreen();
 
             try {
                 int key = System.in.read();
-                if(key == '\033'){
+                if (key == '\033') {
                     statusMessage = "";
+                    if(callback != null){
+                        callback.accept(input.toString(), key);
+                    }
                     return null;
-                }else if(key == '\r') { // enter key
-                    if(input.length() > 0){
+                } else if (key == '\r') { // enter key
+                    if (input.length() > 0) {
+                        if(callback != null){
+                            callback.accept(input.toString(), key);
+                        }
                         return input.toString();
                     }
+                } else if (key == BACKSPACE) {
+                    if(input.length() > 0){
+                        input.deleteCharAt(input.length()-1);
+                    }
                 } else if (key >= 32 && key < 128) {
-                    input.append((char)key);
+                    input.append((char) key);
+                }
+                if(callback != null){
+                    callback.accept(input.toString(), key);
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -134,28 +173,32 @@ public class Main {
     }
 
     private static void insertRow() {
-        if(cx == 0){
+        if (cx == 0) {
             content.add(cy, "");
-        } else if(cx == content.get(cy).length()) {
-            content.add(cy+1, "");
+        } else if (cx == content.get(cy).length()) {
+            content.add(cy + 1, "");
             cx = 0;
         } else {
             String line = content.get(cy);
-            content.add(cy+1, line.substring(cx));
+            content.add(cy + 1, line.substring(cx));
             content.set(cy, line.substring(0, cx));
             cx = 0;
         }
 
-        cy ++;
+        cy++;
         dirty = true;
     }
 
     // deletes the char to the left of cursor
     private static void deleteChar() {
-        if(cy == content.size()) return;
-        if(cx == 0 && cy == 0) return;
+        if (cy == content.size()) {
+            return;
+        }
+        if (cx == 0 && cy == 0) {
+            return;
+        }
 
-        if(cx > 0) {
+        if (cx > 0) {
             int at = cx - 1;
             String line = content.get(cy);
             if (at < 0 || at >= line.length()) {
@@ -163,12 +206,12 @@ public class Main {
             }
             line = line.substring(0, at) + line.substring(at + 1);
             content.set(cy, line);
-            cx --;
+            cx--;
             dirty = true;
         } else {
             String line = content.get(cy);
             deleteRow(cy);
-            cy --;
+            cy--;
             cx = content.get(cy).length();
             content.set(cy, content.get(cy) + line);
             dirty = true;
@@ -176,7 +219,9 @@ public class Main {
     }
 
     private static void deleteRow(int at) {
-        if(at < 0 || at >= content.size()) return;
+        if (at < 0 || at >= content.size()) {
+            return;
+        }
 
         content.remove(at);
         dirty = true;
@@ -185,9 +230,11 @@ public class Main {
     private static void handleKey(int key) {
         // ctrl-q to exit
         if (key == ctrl_key('q')) {
-            if(dirty && quitTimes > 0){
-                statusMessage = String.format("File has unsaved changes. Press Ctrl-Q %d times to quit.", quitTimes);
-                quitTimes --;
+            if (dirty && quitTimes > 0) {
+                statusMessage =
+                    String.format("File has unsaved changes. Press Ctrl-Q %d times to quit.",
+                        quitTimes);
+                quitTimes--;
                 return;
             }
             disableRawMode();
@@ -196,7 +243,9 @@ public class Main {
         } else if (key == ctrl_key('s')) {
             editorSave();
             return;
-        }else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
+        } else if (key == ctrl_key('f')) {
+            editorFind();
+        } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
             moveCursor(key);
         } else if (key == PAGE_UP || key == PAGE_DOWN) {
             // position the cursor to the top/or bottom of window
@@ -234,10 +283,10 @@ public class Main {
         }
 
         statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
-        if(fileName != null){
+        if (fileName != null) {
             statusMessage += " " + fileName;
         }
-        if(dirty){
+        if (dirty) {
             statusMessage += " modified";
         }
     }
@@ -272,7 +321,7 @@ public class Main {
         }
     }
 
-    private static int ctrl_key(int key){
+    private static int ctrl_key(int key) {
         return key & 0x1f;
     }
 
@@ -359,7 +408,7 @@ public class Main {
         yOffset = 0;
 
         statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
-        if(fileName != null){
+        if (fileName != null) {
             statusMessage += " " + fileName;
         }
     }
