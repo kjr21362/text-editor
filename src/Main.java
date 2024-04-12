@@ -15,6 +15,7 @@ public class Main {
     private static final int ARROW_UP = 1000, ARROW_DOWN = 1001, ARROW_LEFT = 1002, ARROW_RIGHT =
         1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
         BACKSPACE = 127;
+    private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
 
     private enum HIGHLIGHT {
         HL_NORMAL,
@@ -72,21 +73,18 @@ public class Main {
     }
 
     private static void initHighlight() {
-        if(content.isEmpty()) {
+        if (content.isEmpty()) {
             return;
         }
 
         highlightedContent = new ArrayList<>();
-        for(String line: content){
+        for (String line : content) {
             List<HIGHLIGHT> highlightedLine =
                 new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
-            for(int i=0; i<line.length(); i++){
-                if(Character.isDigit(line.charAt(i))){
-                    highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
-                }
-            }
             highlightedContent.add(highlightedLine);
         }
+
+        editorUpdateSyntax();
     }
 
     private static void editorOpen(String file) {
@@ -140,7 +138,7 @@ public class Main {
     private static BiConsumer<String, Integer> getEditFindConsumer() {
         BiConsumer<String, Integer> editFind = (query, key) -> {
 
-            if(savedHighlight != null){
+            if (savedHighlight != null) {
                 // restore previous highlighted line
                 highlightedContent.set(savedHighlightLine, savedHighlight);
                 savedHighlight = null;
@@ -180,7 +178,7 @@ public class Main {
                     savedHighlightLine = currentRow;
                     savedHighlight = new ArrayList<>(highlightedLine);
 
-                    for(int j=col; j<col+query.length(); j++){
+                    for (int j = col; j < col + query.length(); j++) {
                         highlightedLine.set(j, HIGHLIGHT.HL_MATCH);
                     }
                     highlightedContent.set(currentRow, highlightedLine);
@@ -233,26 +231,41 @@ public class Main {
     }
 
     private static void editorUpdateSyntax() {
-        for(int r=0; r<content.size(); r++){
+        for (int r = 0; r < content.size(); r++) {
             String line = content.get(r);
             List<HIGHLIGHT> highlightedLine =
                 new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
-            for(int i=0; i<line.length(); i++){
-                if(Character.isDigit(line.charAt(i))){
-                    highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
+            boolean hasSeparatorBefore = true;
+            HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
+            for (int i = 0; i < line.length(); i++) {
+                if (i > 0) {
+                    prevHighlight = highlightedLine.get(i - 1);
                 }
+                if (Character.isDigit(line.charAt(i)) &&
+                    (hasSeparatorBefore || prevHighlight == HIGHLIGHT.HL_NUMBER) ||
+                    (line.charAt(i) == '.' && prevHighlight == HIGHLIGHT.HL_NUMBER)) {
+                    highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
+                    hasSeparatorBefore = false;
+                    continue;
+                }
+
+                hasSeparatorBefore = isSeparator(line.charAt(i));
+
             }
             highlightedContent.set(r, highlightedLine);
         }
     }
 
+    private static boolean isSeparator(int key) {
+        return SEPARATORS.indexOf(key) != -1;
+    }
+
     private static int editorSyntaxToColor(HIGHLIGHT highlight) {
-        switch (highlight){
+        switch (highlight) {
             case HL_NUMBER -> {
                 return 31; // fg red
             }
-            case HL_MATCH ->
-            {
+            case HL_MATCH -> {
                 return 34;
             }
             default -> {
@@ -288,7 +301,7 @@ public class Main {
         } else {
             String line = content.get(cy);
             content.add(cy + 1, line.substring(cx));
-            highlightedContent.add(cy+1, new ArrayList<>());
+            highlightedContent.add(cy + 1, new ArrayList<>());
             content.set(cy, line.substring(0, cx));
             cx = 0;
         }
@@ -552,15 +565,15 @@ public class Main {
                 if (drawLen > 0) {
                     int currentColor = -1;
                     List<HIGHLIGHT> highlightedLine = highlightedContent.get(fileRow);
-                    for(int i=xOffset; i< xOffset + drawLen; i++){
-                        if(highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL){
-                            if(currentColor != -1) {
+                    for (int i = xOffset; i < xOffset + drawLen; i++) {
+                        if (highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL) {
+                            if (currentColor != -1) {
                                 builder.append("\033[39m");
                                 currentColor = -1;
                             }
                         } else {
                             int color = editorSyntaxToColor(highlightedLine.get(i));
-                            if(color != currentColor) {
+                            if (color != currentColor) {
                                 currentColor = color;
                                 builder.append(String.format("\033[%dm", color));
                             }
