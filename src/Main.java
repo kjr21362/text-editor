@@ -18,7 +18,8 @@ public class Main {
 
     private enum HIGHLIGHT {
         HL_NORMAL,
-        HL_NUMBER;
+        HL_NUMBER,
+        HL_MATCH
     }
 
     // Number of extra ctrl-q action needed to exit the application,
@@ -43,7 +44,10 @@ public class Main {
     private static String originalTerminalSettings;
     private static String statusMessage;
     private static List<String> content = new ArrayList<>();
-    private static List<List<HIGHLIGHT>> highlightedContent = new ArrayList<>();
+    private static List<List<HIGHLIGHT>> highlightedContent;
+
+    private static List<HIGHLIGHT> savedHighlight;
+    private static int savedHighlightLine;
 
     private static String fileName;
 
@@ -58,11 +62,30 @@ public class Main {
         enableRawMode();
         initEditor();
         editorOpen(fileName);
+        initHighlight();
 
         while (true) {
             refreshScreen();
             int key = readKey();
             handleKey(key);
+        }
+    }
+
+    private static void initHighlight() {
+        if(content.isEmpty()) {
+            return;
+        }
+
+        highlightedContent = new ArrayList<>();
+        for(String line: content){
+            List<HIGHLIGHT> highlightedLine =
+                new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
+            for(int i=0; i<line.length(); i++){
+                if(Character.isDigit(line.charAt(i))){
+                    highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
+                }
+            }
+            highlightedContent.add(highlightedLine);
         }
     }
 
@@ -117,6 +140,12 @@ public class Main {
     private static BiConsumer<String, Integer> getEditFindConsumer() {
         BiConsumer<String, Integer> editFind = (query, key) -> {
 
+            if(savedHighlight != null){
+                // restore previous highlighted line
+                highlightedContent.set(savedHighlightLine, savedHighlight);
+                savedHighlight = null;
+            }
+
             if (key == '\033' || key == '\r') {
                 lastMatchRow = -1;
                 direction = DIRECTION_FORWARD;
@@ -145,6 +174,17 @@ public class Main {
                     lastMatchRow = currentRow;
                     cx = col;
                     cy = currentRow;
+
+                    List<HIGHLIGHT> highlightedLine = highlightedContent.get(currentRow);
+                    // save highlighted line
+                    savedHighlightLine = currentRow;
+                    savedHighlight = new ArrayList<>(highlightedLine);
+
+                    for(int j=col; j<col+query.length(); j++){
+                        highlightedLine.set(j, HIGHLIGHT.HL_MATCH);
+                    }
+                    highlightedContent.set(currentRow, highlightedLine);
+
                     return;
                 }
             }
@@ -193,8 +233,8 @@ public class Main {
     }
 
     private static void editorUpdateSyntax() {
-        highlightedContent = new ArrayList<>();
-        for(String line: content){
+        for(int r=0; r<content.size(); r++){
+            String line = content.get(r);
             List<HIGHLIGHT> highlightedLine =
                 new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
             for(int i=0; i<line.length(); i++){
@@ -202,7 +242,7 @@ public class Main {
                     highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
                 }
             }
-            highlightedContent.add(highlightedLine);
+            highlightedContent.set(r, highlightedLine);
         }
     }
 
@@ -210,6 +250,10 @@ public class Main {
         switch (highlight){
             case HL_NUMBER -> {
                 return 31; // fg red
+            }
+            case HL_MATCH ->
+            {
+                return 34;
             }
             default -> {
                 return 37; // fg white
@@ -237,12 +281,14 @@ public class Main {
     private static void insertRow() {
         if (cx == 0) {
             content.add(cy, "");
+            highlightedContent.add(cy, new ArrayList<>());
         } else if (cx == content.get(cy).length()) {
             content.add(cy + 1, "");
             cx = 0;
         } else {
             String line = content.get(cy);
             content.add(cy + 1, line.substring(cx));
+            highlightedContent.add(cy+1, new ArrayList<>());
             content.set(cy, line.substring(0, cx));
             cx = 0;
         }
@@ -327,14 +373,18 @@ public class Main {
         } else if (key == DELETE_KEY) {
             moveCursor(ARROW_RIGHT);
             deleteChar();
+            editorUpdateSyntax();
         } else if (key == '\r') { // enter key
             insertRow();
+            editorUpdateSyntax();
         } else if (key == BACKSPACE) {
             deleteChar();
+            editorUpdateSyntax();
         } else if (key == '\033') { // escape key
             // nothing
         } else {
             insertChar(key);
+            editorUpdateSyntax();
         }
 
         quitTimes = QUIT_TIMES;
@@ -477,7 +527,7 @@ public class Main {
 
     private static void refreshScreen() {
         editorScroll();
-        editorUpdateSyntax();
+        //editorUpdateSyntax();
         StringBuilder builder = new StringBuilder();
         builder.append("\033[?25l"); // hides the cursor
         //builder.append("\033[2J"); // clears entire screen
