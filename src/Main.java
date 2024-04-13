@@ -320,8 +320,11 @@ public class Main {
                         prevHighlight = highlightedLine.get(i - 1);
                     }
 
+                    // single line comment highlight
                     if (!singleLineCommentStart.isEmpty() && in_string == 0) {
-                        if (line.stripLeading().startsWith(singleLineCommentStart)) {
+                        if (i + singleLineCommentStart.length() <= line.length() &&
+                            line.substring(i, i + singleLineCommentStart.length())
+                                .equals(singleLineCommentStart)) {
                             for (int j = i; j < line.length(); j++) {
                                 highlightedLine.set(j, HIGHLIGHT.HL_COMMENT);
                             }
