@@ -16,16 +16,19 @@ class EditorSyntax {
     String fileType;
     String[] fileMatch;
     String singleLineCommentStart;
+    String[] keywords;
     int hl_flags;
 
     public EditorSyntax() {
     }
 
     public EditorSyntax(String fileType, String[] fileMatch, String singleLineCommentStart,
+                        String[] keywords,
                         int hl_flags) {
         this.fileType = fileType;
         this.fileMatch = fileMatch.clone();
         this.singleLineCommentStart = singleLineCommentStart;
+        this.keywords = keywords.clone();
         this.hl_flags = hl_flags;
     }
 }
@@ -36,13 +39,19 @@ public class Main {
         BACKSPACE = 127;
 
     private static final int HL_HIGHLIGHT_NUMBERS = 1 << 0;
-    public static final int HL_HIGHLIGHT_STRING = 1 << 1;
+    private static final int HL_HIGHLIGHT_STRING = 1 << 1;
 
     private static final String[] C_HL_EXTENSIONS = {".c", ".h", ".cpp"};
+    private static final String[] C_HL_KEYWORDS = {
+        "switch", "if", "while", "for", "break", "continue", "return", "else",
+        "struct", "union", "typedef", "static", "enum", "class", "case",
+        "int", "long", "double", "float", "char", "unsigned", "signed",
+        "void"
+    };
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
 
     private static EditorSyntax[] HLDB =
-        {new EditorSyntax("c", C_HL_EXTENSIONS, "//",
+        {new EditorSyntax("c", C_HL_EXTENSIONS, "//", C_HL_KEYWORDS,
             HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
     private static EditorSyntax editorSyntax;
 
@@ -51,7 +60,8 @@ public class Main {
         HL_NUMBER,
         HL_MATCH,
         HL_STRING,
-        HL_COMMENT
+        HL_COMMENT,
+        HL_KEYWORD
     }
 
     // Number of extra ctrl-q action needed to exit the application,
@@ -345,7 +355,6 @@ public class Main {
                         }
                     }
 
-
                     if ((editorSyntax.hl_flags & HL_HIGHLIGHT_NUMBERS) != 0) {
                         // number highlight is enabled
                         if (Character.isDigit(line.charAt(i)) &&
@@ -354,6 +363,30 @@ public class Main {
                             highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
                             hasSeparatorBefore = false;
                             i++;
+                            continue;
+                        }
+                    }
+
+                    // keyword highlight
+                    if (hasSeparatorBefore) {
+                        boolean seenKeyword = false;
+                        for (int j = 0; j < editorSyntax.keywords.length; j++) {
+                            String keyword = editorSyntax.keywords[j];
+                            if (i + keyword.length() <= line.length() &&
+                                line.substring(i, i + keyword.length())
+                                    .equals(keyword) &&
+                                (i + keyword.length() == line.length() ||
+                                    isSeparator(line.charAt(i + keyword.length())))) {
+                                for (int k = i; k < i + keyword.length(); k++) {
+                                    highlightedLine.set(k, HIGHLIGHT.HL_KEYWORD);
+                                }
+                                i += keyword.length();
+                                seenKeyword = true;
+                                break;
+                            }
+                        }
+                        if (seenKeyword) {
+                            hasSeparatorBefore = false;
                             continue;
                         }
                     }
@@ -383,6 +416,9 @@ public class Main {
             }
             case HL_COMMENT -> {
                 return 36;
+            }
+            case HL_KEYWORD -> {
+                return 33;
             }
             default -> {
                 return 37; // fg white
