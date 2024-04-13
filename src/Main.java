@@ -15,14 +15,17 @@ import java.util.stream.Stream;
 class EditorSyntax {
     String fileType;
     String[] fileMatch;
+    String singleLineCommentStart;
     int hl_flags;
 
     public EditorSyntax() {
     }
 
-    public EditorSyntax(String fileType, String[] fileMatch, int hl_flags) {
+    public EditorSyntax(String fileType, String[] fileMatch, String singleLineCommentStart,
+                        int hl_flags) {
         this.fileType = fileType;
         this.fileMatch = fileMatch.clone();
+        this.singleLineCommentStart = singleLineCommentStart;
         this.hl_flags = hl_flags;
     }
 }
@@ -39,14 +42,16 @@ public class Main {
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
 
     private static EditorSyntax[] HLDB =
-        {new EditorSyntax("c", C_HL_EXTENSIONS, HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
+        {new EditorSyntax("c", C_HL_EXTENSIONS, "//",
+            HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
     private static EditorSyntax editorSyntax;
 
     private enum HIGHLIGHT {
         HL_NORMAL,
         HL_NUMBER,
         HL_MATCH,
-        HL_STRING
+        HL_STRING,
+        HL_COMMENT
     }
 
     // Number of extra ctrl-q action needed to exit the application,
@@ -297,33 +302,44 @@ public class Main {
                 int in_string = 0;
                 HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
 
+                String singleLineCommentStart = editorSyntax.singleLineCommentStart;
+
                 int i = 0;
                 while (i < line.length()) {
                     if (i > 0) {
                         prevHighlight = highlightedLine.get(i - 1);
                     }
 
+                    if (!singleLineCommentStart.isEmpty() && in_string == 0) {
+                        if (line.stripLeading().startsWith(singleLineCommentStart)) {
+                            for (int j = i; j < line.length(); j++) {
+                                highlightedLine.set(j, HIGHLIGHT.HL_COMMENT);
+                            }
+                            break;
+                        }
+                    }
+
                     if ((editorSyntax.hl_flags & HL_HIGHLIGHT_STRING) != 0) {
                         // string highlight is enabled
                         if (in_string > 0) {
                             highlightedLine.set(i, HIGHLIGHT.HL_STRING);
-                            if (line.charAt(i) == '\\' && i+1 < line.length()) {
-                                highlightedLine.set(i+1, HIGHLIGHT.HL_STRING);
+                            if (line.charAt(i) == '\\' && i + 1 < line.length()) {
+                                highlightedLine.set(i + 1, HIGHLIGHT.HL_STRING);
                                 i += 2;
                                 continue;
                             }
 
-                            if(line.charAt(i) == in_string) {
+                            if (line.charAt(i) == in_string) {
                                 in_string = 0;
                             }
                             hasSeparatorBefore = false;
-                            i ++;
+                            i++;
                             continue;
                         } else {
                             if (line.charAt(i) == '"' || line.charAt(i) == '\'') {
                                 in_string = line.charAt(i);
                                 highlightedLine.set(i, HIGHLIGHT.HL_STRING);
-                                i ++;
+                                i++;
                                 continue;
                             }
                         }
@@ -337,13 +353,13 @@ public class Main {
                             (line.charAt(i) == '.' && prevHighlight == HIGHLIGHT.HL_NUMBER)) {
                             highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
                             hasSeparatorBefore = false;
-                            i ++;
+                            i++;
                             continue;
                         }
                     }
 
                     hasSeparatorBefore = isSeparator(line.charAt(i));
-                    i ++;
+                    i++;
                 }
             }
             highlightedContent.set(r, highlightedLine);
@@ -364,6 +380,9 @@ public class Main {
             }
             case HL_STRING -> {
                 return 35;
+            }
+            case HL_COMMENT -> {
+                return 36;
             }
             default -> {
                 return 37; // fg white
