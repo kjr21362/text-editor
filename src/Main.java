@@ -7,15 +7,39 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+class EditorSyntax {
+    String fileType;
+    String[] fileMatch;
+    int hl_flags;
+
+    public EditorSyntax() {
+    }
+
+    public EditorSyntax(String fileType, String[] fileMatch, int hl_flags) {
+        this.fileType = fileType;
+        this.fileMatch = fileMatch.clone();
+        this.hl_flags = hl_flags;
+    }
+}
 
 public class Main {
     private static final int ARROW_UP = 1000, ARROW_DOWN = 1001, ARROW_LEFT = 1002, ARROW_RIGHT =
         1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
         BACKSPACE = 127;
+
+    private static final int HL_HIGHLIGHT_NUMBERS = 1 << 0;
+
+    private static final String[] C_HL_EXTENSIONS = {".c", ".h", ".cpp"};
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
+
+    private static EditorSyntax[] HLDB =
+        {new EditorSyntax("c", C_HL_EXTENSIONS, HL_HIGHLIGHT_NUMBERS)};
+    private static EditorSyntax editorSyntax;
 
     private enum HIGHLIGHT {
         HL_NORMAL,
@@ -44,7 +68,7 @@ public class Main {
     private static int xOffset;
     private static String originalTerminalSettings;
     private static String statusMessage;
-    private static List<String> content = new ArrayList<>();
+    private static List<String> content;
     private static List<List<HIGHLIGHT>> highlightedContent;
 
     private static List<HIGHLIGHT> savedHighlight;
@@ -73,7 +97,7 @@ public class Main {
     }
 
     private static void initHighlight() {
-        if (content.isEmpty()) {
+        if (content == null || content.isEmpty()) {
             return;
         }
 
@@ -84,13 +108,15 @@ public class Main {
             highlightedContent.add(highlightedLine);
         }
 
-        editorUpdateSyntax();
+        editorUpdateHighlight();
     }
 
     private static void editorOpen(String file) {
         if (file == null || file.isEmpty()) {
             return;
         }
+
+        editorSelectSyntax();
 
         Path path = Path.of(file);
         if (Files.exists(path)) {
@@ -111,6 +137,8 @@ public class Main {
                 return;
             }
         }
+        editorSelectSyntax();
+
         Path path = Path.of(fileName);
         try {
             Files.deleteIfExists(path);
@@ -230,27 +258,58 @@ public class Main {
         }
     }
 
-    private static void editorUpdateSyntax() {
+    private static void editorSelectSyntax() {
+        if (fileName == null) {
+            return;
+        }
+
+        editorSyntax = null;
+        Optional<String> fileExt = getFileExtension(fileName);
+
+        for (EditorSyntax syntax : HLDB) {
+            for (String fileMatch : syntax.fileMatch) {
+                boolean isExt = fileMatch.charAt(0) == '.';
+                if ((isExt && !fileExt.isEmpty() && fileExt.get().equals(fileMatch)) ||
+                    (!isExt && fileName.contains(fileMatch))) {
+                    editorSyntax = syntax;
+                    return;
+                }
+            }
+        }
+
+    }
+
+    private static Optional<String> getFileExtension(String fileName) {
+        return Optional.ofNullable(fileName).filter(f -> f.contains("."))
+            .map(f -> f.substring(f.lastIndexOf(".")));
+    }
+
+    private static void editorUpdateHighlight() {
         for (int r = 0; r < content.size(); r++) {
             String line = content.get(r);
             List<HIGHLIGHT> highlightedLine =
                 new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
-            boolean hasSeparatorBefore = true;
-            HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
-            for (int i = 0; i < line.length(); i++) {
-                if (i > 0) {
-                    prevHighlight = highlightedLine.get(i - 1);
-                }
-                if (Character.isDigit(line.charAt(i)) &&
-                    (hasSeparatorBefore || prevHighlight == HIGHLIGHT.HL_NUMBER) ||
-                    (line.charAt(i) == '.' && prevHighlight == HIGHLIGHT.HL_NUMBER)) {
-                    highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
-                    hasSeparatorBefore = false;
-                    continue;
-                }
+            if (editorSyntax != null) {
+                // syntax highlight is enabled
+                boolean hasSeparatorBefore = true;
+                HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
+                for (int i = 0; i < line.length(); i++) {
+                    if (i > 0) {
+                        prevHighlight = highlightedLine.get(i - 1);
+                    }
+                    if ((editorSyntax.hl_flags & HL_HIGHLIGHT_NUMBERS) != 0) {
+                        // number highlight is enabled
+                        if (Character.isDigit(line.charAt(i)) &&
+                            (hasSeparatorBefore || prevHighlight == HIGHLIGHT.HL_NUMBER) ||
+                            (line.charAt(i) == '.' && prevHighlight == HIGHLIGHT.HL_NUMBER)) {
+                            highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
+                            hasSeparatorBefore = false;
+                            continue;
+                        }
+                    }
 
-                hasSeparatorBefore = isSeparator(line.charAt(i));
-
+                    hasSeparatorBefore = isSeparator(line.charAt(i));
+                }
             }
             highlightedContent.set(r, highlightedLine);
         }
@@ -277,6 +336,7 @@ public class Main {
     private static void insertChar(int c) {
         if (cy == content.size()) {
             content.add("");
+            highlightedContent.add(new ArrayList<>());
         }
         int at = cx;
         String row = content.get(cy);
@@ -297,6 +357,7 @@ public class Main {
             highlightedContent.add(cy, new ArrayList<>());
         } else if (cx == content.get(cy).length()) {
             content.add(cy + 1, "");
+            highlightedContent.add(cy + 1, new ArrayList<>());
             cx = 0;
         } else {
             String line = content.get(cy);
@@ -363,6 +424,7 @@ public class Main {
             System.exit(0);
         } else if (key == ctrl_key('s')) {
             editorSave();
+            editorUpdateHighlight();
             return;
         } else if (key == ctrl_key('f')) {
             editorFind();
@@ -386,18 +448,18 @@ public class Main {
         } else if (key == DELETE_KEY) {
             moveCursor(ARROW_RIGHT);
             deleteChar();
-            editorUpdateSyntax();
+            editorUpdateHighlight();
         } else if (key == '\r') { // enter key
             insertRow();
-            editorUpdateSyntax();
+            editorUpdateHighlight();
         } else if (key == BACKSPACE) {
             deleteChar();
-            editorUpdateSyntax();
+            editorUpdateHighlight();
         } else if (key == '\033') { // escape key
             // nothing
         } else {
             insertChar(key);
-            editorUpdateSyntax();
+            editorUpdateHighlight();
         }
 
         quitTimes = QUIT_TIMES;
@@ -407,13 +469,7 @@ public class Main {
             cx = content.get(cy).length();
         }
 
-        statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
-        if (fileName != null) {
-            statusMessage += " " + fileName;
-        }
-        if (dirty) {
-            statusMessage += " modified";
-        }
+        buildStatusMessage();
     }
 
     private static void moveCursor(int key) {
@@ -531,10 +587,26 @@ public class Main {
         cy = 0;
         xOffset = 0;
         yOffset = 0;
+        editorSyntax = null;
 
+        content = new ArrayList<>();
+        highlightedContent = new ArrayList<>();
+
+        buildStatusMessage();
+    }
+
+    private static void buildStatusMessage() {
         statusMessage = String.format("Editor - v0.0.1. cx: %d, cy: %d", cx, cy);
         if (fileName != null) {
             statusMessage += " " + fileName;
+        }
+        if (editorSyntax == null) {
+            statusMessage += " no ft";
+        } else {
+            statusMessage += " " + editorSyntax.fileType;
+        }
+        if (dirty) {
+            statusMessage += " modified";
         }
     }
 
