@@ -33,18 +33,20 @@ public class Main {
         BACKSPACE = 127;
 
     private static final int HL_HIGHLIGHT_NUMBERS = 1 << 0;
+    public static final int HL_HIGHLIGHT_STRING = 1 << 1;
 
     private static final String[] C_HL_EXTENSIONS = {".c", ".h", ".cpp"};
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
 
     private static EditorSyntax[] HLDB =
-        {new EditorSyntax("c", C_HL_EXTENSIONS, HL_HIGHLIGHT_NUMBERS)};
+        {new EditorSyntax("c", C_HL_EXTENSIONS, HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
     private static EditorSyntax editorSyntax;
 
     private enum HIGHLIGHT {
         HL_NORMAL,
         HL_NUMBER,
-        HL_MATCH
+        HL_MATCH,
+        HL_STRING
     }
 
     // Number of extra ctrl-q action needed to exit the application,
@@ -292,11 +294,42 @@ public class Main {
             if (editorSyntax != null) {
                 // syntax highlight is enabled
                 boolean hasSeparatorBefore = true;
+                int in_string = 0;
                 HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
-                for (int i = 0; i < line.length(); i++) {
+
+                int i = 0;
+                while (i < line.length()) {
                     if (i > 0) {
                         prevHighlight = highlightedLine.get(i - 1);
                     }
+
+                    if ((editorSyntax.hl_flags & HL_HIGHLIGHT_STRING) != 0) {
+                        // string highlight is enabled
+                        if (in_string > 0) {
+                            highlightedLine.set(i, HIGHLIGHT.HL_STRING);
+                            if (line.charAt(i) == '\\' && i+1 < line.length()) {
+                                highlightedLine.set(i+1, HIGHLIGHT.HL_STRING);
+                                i += 2;
+                                continue;
+                            }
+
+                            if(line.charAt(i) == in_string) {
+                                in_string = 0;
+                            }
+                            hasSeparatorBefore = false;
+                            i ++;
+                            continue;
+                        } else {
+                            if (line.charAt(i) == '"' || line.charAt(i) == '\'') {
+                                in_string = line.charAt(i);
+                                highlightedLine.set(i, HIGHLIGHT.HL_STRING);
+                                i ++;
+                                continue;
+                            }
+                        }
+                    }
+
+
                     if ((editorSyntax.hl_flags & HL_HIGHLIGHT_NUMBERS) != 0) {
                         // number highlight is enabled
                         if (Character.isDigit(line.charAt(i)) &&
@@ -304,11 +337,13 @@ public class Main {
                             (line.charAt(i) == '.' && prevHighlight == HIGHLIGHT.HL_NUMBER)) {
                             highlightedLine.set(i, HIGHLIGHT.HL_NUMBER);
                             hasSeparatorBefore = false;
+                            i ++;
                             continue;
                         }
                     }
 
                     hasSeparatorBefore = isSeparator(line.charAt(i));
+                    i ++;
                 }
             }
             highlightedContent.set(r, highlightedLine);
@@ -326,6 +361,9 @@ public class Main {
             }
             case HL_MATCH -> {
                 return 34;
+            }
+            case HL_STRING -> {
+                return 35;
             }
             default -> {
                 return 37; // fg white
