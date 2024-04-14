@@ -16,6 +16,8 @@ class EditorSyntax {
     String fileType;
     String[] fileMatch;
     String singleLineCommentStart;
+    String multilineCommentStart;
+    String multilineCommentEnd;
     String[] keywords;
     int hl_flags;
 
@@ -23,11 +25,14 @@ class EditorSyntax {
     }
 
     public EditorSyntax(String fileType, String[] fileMatch, String singleLineCommentStart,
+                        String multilineCommentStart, String multilineCommentEnd,
                         String[] keywords,
                         int hl_flags) {
         this.fileType = fileType;
         this.fileMatch = fileMatch.clone();
         this.singleLineCommentStart = singleLineCommentStart;
+        this.multilineCommentStart = multilineCommentStart;
+        this.multilineCommentEnd = multilineCommentEnd;
         this.keywords = keywords.clone();
         this.hl_flags = hl_flags;
     }
@@ -51,7 +56,7 @@ public class Main {
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
 
     private static EditorSyntax[] HLDB =
-        {new EditorSyntax("c", C_HL_EXTENSIONS, "//", C_HL_KEYWORDS,
+        {new EditorSyntax("c", C_HL_EXTENSIONS, "//", "/*", "*/", C_HL_KEYWORDS,
             HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
     private static EditorSyntax editorSyntax;
 
@@ -61,7 +66,8 @@ public class Main {
         HL_MATCH,
         HL_STRING,
         HL_COMMENT,
-        HL_KEYWORD
+        HL_KEYWORD,
+        HL_MLCOMMENT
     }
 
     // Number of extra ctrl-q action needed to exit the application,
@@ -87,6 +93,7 @@ public class Main {
     private static String statusMessage;
     private static List<String> content;
     private static List<List<HIGHLIGHT>> highlightedContent;
+    private static List<Boolean> rowInComment;
 
     private static List<HIGHLIGHT> savedHighlight;
     private static int savedHighlightLine;
@@ -123,6 +130,7 @@ public class Main {
             List<HIGHLIGHT> highlightedLine =
                 new ArrayList<>(Collections.nCopies(line.length(), HIGHLIGHT.HL_NORMAL));
             highlightedContent.add(highlightedLine);
+            rowInComment.add(false);
         }
 
         editorUpdateHighlight();
@@ -309,10 +317,13 @@ public class Main {
             if (editorSyntax != null) {
                 // syntax highlight is enabled
                 boolean hasSeparatorBefore = true;
+                boolean inComment = r > 0 && rowInComment.get(r-1);
                 int in_string = 0;
                 HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
 
                 String singleLineCommentStart = editorSyntax.singleLineCommentStart;
+                String multilineCommentStart = editorSyntax.multilineCommentStart;
+                String multilineCommentEnd = editorSyntax.multilineCommentEnd;
 
                 int i = 0;
                 while (i < line.length()) {
@@ -321,7 +332,7 @@ public class Main {
                     }
 
                     // single line comment highlight
-                    if (!singleLineCommentStart.isEmpty() && in_string == 0) {
+                    if (!singleLineCommentStart.isEmpty() && in_string == 0 && !inComment) {
                         if (i + singleLineCommentStart.length() <= line.length() &&
                             line.substring(i, i + singleLineCommentStart.length())
                                 .equals(singleLineCommentStart)) {
@@ -329,6 +340,37 @@ public class Main {
                                 highlightedLine.set(j, HIGHLIGHT.HL_COMMENT);
                             }
                             break;
+                        }
+                    }
+
+                    // multiline comment highlight
+                    if (!multilineCommentStart.isEmpty() &&
+                        !multilineCommentEnd.isEmpty() && in_string == 0) {
+                        if (inComment) {
+                            highlightedLine.set(i, HIGHLIGHT.HL_MLCOMMENT);
+                            if (i + multilineCommentEnd.length() <= line.length() &&
+                                line.substring(i, i + multilineCommentEnd.length())
+                                    .equals(multilineCommentEnd)) {
+                                for(int j=i; j<i+multilineCommentEnd.length(); j++) {
+                                    highlightedLine.set(j, HIGHLIGHT.HL_MLCOMMENT);
+                                }
+                                i += multilineCommentEnd.length();
+                                inComment = false;
+                                hasSeparatorBefore = true;
+                                continue;
+                            } else {
+                                i++;
+                                continue;
+                            }
+                        } else if (i + multilineCommentStart.length() <= line.length() &&
+                            line.substring(i, i + multilineCommentStart.length())
+                                .equals(multilineCommentStart)) {
+                            for(int j=i; j<i+multilineCommentStart.length(); j++) {
+                                highlightedLine.set(j, HIGHLIGHT.HL_MLCOMMENT);
+                            }
+                            inComment = true;
+                            i += multilineCommentStart.length();
+                            continue;
                         }
                     }
 
@@ -397,6 +439,8 @@ public class Main {
                     hasSeparatorBefore = isSeparator(line.charAt(i));
                     i++;
                 }
+
+                rowInComment.set(r, inComment);
             }
             highlightedContent.set(r, highlightedLine);
         }
@@ -408,24 +452,19 @@ public class Main {
 
     private static int editorSyntaxToColor(HIGHLIGHT highlight) {
         switch (highlight) {
-            case HL_NUMBER -> {
+            case HL_NUMBER:
                 return 31; // fg red
-            }
-            case HL_MATCH -> {
+            case HL_MATCH:
                 return 34;
-            }
-            case HL_STRING -> {
+            case HL_STRING:
                 return 35;
-            }
-            case HL_COMMENT -> {
+            case HL_COMMENT:
+            case HL_MLCOMMENT:
                 return 36;
-            }
-            case HL_KEYWORD -> {
+            case HL_KEYWORD:
                 return 33;
-            }
-            default -> {
+            default:
                 return 37; // fg white
-            }
         }
     }
 
@@ -451,14 +490,17 @@ public class Main {
         if (cx == 0) {
             content.add(cy, "");
             highlightedContent.add(cy, new ArrayList<>());
+            rowInComment.add(cy, false);
         } else if (cx == content.get(cy).length()) {
             content.add(cy + 1, "");
             highlightedContent.add(cy + 1, new ArrayList<>());
+            rowInComment.add(cy + 1, false);
             cx = 0;
         } else {
             String line = content.get(cy);
             content.add(cy + 1, line.substring(cx));
             highlightedContent.add(cy + 1, new ArrayList<>());
+            rowInComment.add(cy + 1, false);
             content.set(cy, line.substring(0, cx));
             cx = 0;
         }
@@ -687,6 +729,7 @@ public class Main {
 
         content = new ArrayList<>();
         highlightedContent = new ArrayList<>();
+        rowInComment = new ArrayList<>();
 
         buildStatusMessage();
     }
