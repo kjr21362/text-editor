@@ -777,7 +777,16 @@ public class Main {
                     int currentColor = -1;
                     List<HIGHLIGHT> highlightedLine = highlightedContent.get(fileRow);
                     for (int i = xOffset; i < xOffset + drawLen; i++) {
-                        if (highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL) {
+                        if(Character.isISOControl(line.charAt(i))) {
+                            // handle non-printable chars
+                            int sym = (line.charAt(i) <= 26 ? '@' + line.charAt(i) : '?');
+                            builder.append("\033[7m"); // inverts color
+                            builder.append((char) sym);
+                            builder.append("\033[m"); // turns off invert color
+                            if (currentColor != -1) {
+                                builder.append(String.format("\033[%dm", currentColor));
+                            }
+                        }else if (highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL) {
                             if (currentColor != -1) {
                                 builder.append("\033[39m");
                                 currentColor = -1;
