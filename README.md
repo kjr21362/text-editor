@@ -11,7 +11,7 @@ Supports
 - Ctrl-S: Save
 - Ctrl-Q: Quit
 - Ctrl-F: Search
-- Syntax highlighting: C
+- Syntax highlighting: C, Java
 
 The program was only for learning purposes. It has only been tested on MacOS.
 

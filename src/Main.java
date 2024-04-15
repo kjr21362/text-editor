@@ -53,11 +53,26 @@ public class Main {
         "int", "long", "double", "float", "char", "unsigned", "signed",
         "void"
     };
+
+    private static final String[] JAVA_HL_EXTENSIONS = {".java"};
+    private static final String[] JAVA_HL_KEYWORDS =
+        {"abstract", "continue", "for", "new", "switch",
+            "assert", "default", "goto", "package", "synchronized",
+            "boolean", "do", "if", "private", "this",
+            "break", "double", "implements", "protected", "throw",
+            "byte", "else", "import", "public", "throws",
+            "case", "enum", "instanceof", "return", "transient",
+            "catch", "extends", "int", "short", "try",
+            "char", "final", "interface", "static", "void",
+            "class", "finally", "long", "strictfp", "volatile",
+            "const", "float", "native", "super", "while"};
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
 
     private static EditorSyntax[] HLDB =
         {new EditorSyntax("c", C_HL_EXTENSIONS, "//", "/*", "*/", C_HL_KEYWORDS,
-            HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
+            HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING),
+            new EditorSyntax("java", JAVA_HL_EXTENSIONS, "//", "/*", "*/", JAVA_HL_KEYWORDS,
+                HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRING)};
     private static EditorSyntax editorSyntax;
 
     private enum HIGHLIGHT {
@@ -317,7 +332,7 @@ public class Main {
             if (editorSyntax != null) {
                 // syntax highlight is enabled
                 boolean hasSeparatorBefore = true;
-                boolean inComment = r > 0 && rowInComment.get(r-1);
+                boolean inComment = r > 0 && rowInComment.get(r - 1);
                 int in_string = 0;
                 HIGHLIGHT prevHighlight = HIGHLIGHT.HL_NORMAL;
 
@@ -351,7 +366,7 @@ public class Main {
                             if (i + multilineCommentEnd.length() <= line.length() &&
                                 line.substring(i, i + multilineCommentEnd.length())
                                     .equals(multilineCommentEnd)) {
-                                for(int j=i; j<i+multilineCommentEnd.length(); j++) {
+                                for (int j = i; j < i + multilineCommentEnd.length(); j++) {
                                     highlightedLine.set(j, HIGHLIGHT.HL_MLCOMMENT);
                                 }
                                 i += multilineCommentEnd.length();
@@ -365,7 +380,7 @@ public class Main {
                         } else if (i + multilineCommentStart.length() <= line.length() &&
                             line.substring(i, i + multilineCommentStart.length())
                                 .equals(multilineCommentStart)) {
-                            for(int j=i; j<i+multilineCommentStart.length(); j++) {
+                            for (int j = i; j < i + multilineCommentStart.length(); j++) {
                                 highlightedLine.set(j, HIGHLIGHT.HL_MLCOMMENT);
                             }
                             inComment = true;
@@ -777,7 +792,7 @@ public class Main {
                     int currentColor = -1;
                     List<HIGHLIGHT> highlightedLine = highlightedContent.get(fileRow);
                     for (int i = xOffset; i < xOffset + drawLen; i++) {
-                        if(Character.isISOControl(line.charAt(i))) {
+                        if (Character.isISOControl(line.charAt(i))) {
                             // handle non-printable chars
                             int sym = (line.charAt(i) <= 26 ? '@' + line.charAt(i) : '?');
                             builder.append("\033[7m"); // inverts color
@@ -786,7 +801,7 @@ public class Main {
                             if (currentColor != -1) {
                                 builder.append(String.format("\033[%dm", currentColor));
                             }
-                        }else if (highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL) {
+                        } else if (highlightedLine.get(i) == HIGHLIGHT.HL_NORMAL) {
                             if (currentColor != -1) {
                                 builder.append("\033[39m");
                                 currentColor = -1;
