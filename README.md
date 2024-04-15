@@ -23,7 +23,7 @@ The program was only for learning purposes. It has only been tested on MacOS.
 - Line numbers
 - More file types and highlight support
 - Audo indent
-- word wrapping
+- word wrapping: [memento](https://en.wikipedia.org/wiki/Memento_pattern), [command](https://en.wikipedia.org/wiki/Command_pattern).
 - Multi-platform support
 
 ## References
