@@ -137,6 +137,7 @@ public class Main {
     private static int savedHighlightLine;
 
     private static List<EditorAction> actionHistory;
+    private static List<EditorAction> redoActionHistory;
 
     private static String fileName;
 
@@ -508,7 +509,7 @@ public class Main {
         }
     }
 
-    private static void insertChar(int c, boolean addToActionHistory) {
+    private static void insertChar(int c, boolean addToActionHistory, boolean isUserAction) {
         if (cy == content.size()) {
             content.add("");
             highlightedContent.add(new ArrayList<>());
@@ -522,16 +523,21 @@ public class Main {
         builder.insert(at, (char) c);
         content.set(cy, builder.toString());
 
+        cx++;
+        dirty = true;
+
         if (addToActionHistory) {
-            EditorAction action = new EditorAction(EditorAction.ACTION.INSERT_CHAR, at, cy, 0);
+            EditorAction action = new EditorAction(EditorAction.ACTION.INSERT_CHAR, cx, cy, c);
             addEditorAction(action);
         }
 
-        cx++;
-        dirty = true;
+        if (isUserAction) {
+            // user action clears redo history. Actions from undo will remain.
+            redoActionHistory.clear();
+        }
     }
 
-    private static void insertRow(boolean addToActionHistory) {
+    private static void insertRow(boolean addToActionHistory, boolean isUserAction) {
         if (cx == 0) {
             content.add(cy, "");
             highlightedContent.add(cy, new ArrayList<>());
@@ -550,18 +556,23 @@ public class Main {
             cx = 0;
         }
 
+        cy++;
+        dirty = true;
+
         if (addToActionHistory) {
             EditorAction action =
-                new EditorAction(EditorAction.ACTION.INSERT_ROW, cx, cy + 1, 0);
+                new EditorAction(EditorAction.ACTION.INSERT_ROW, cx, cy, 0);
             addEditorAction(action);
         }
 
-        cy++;
-        dirty = true;
+        if (isUserAction) {
+            // user action clears redo history. Actions from undo will remain.
+            redoActionHistory.clear();
+        }
     }
 
     // deletes the char to the left of cursor
-    private static void deleteChar(boolean addToActionHistory) {
+    private static void deleteChar(boolean addToActionHistory, boolean isUserAction) {
         if (cy == content.size()) {
             return;
         }
@@ -598,6 +609,11 @@ public class Main {
                 addEditorAction(action);
             }
         }
+
+        if (isUserAction) {
+            // user action clears redo history. Actions from undo will remain.
+            redoActionHistory.clear();
+        }
     }
 
     private static void deleteRow(int at) {
@@ -625,14 +641,33 @@ public class Main {
         cx = editorAction.x;
         cy = editorAction.y;
         switch (editorAction.action) {
-            case EditorAction.ACTION.INSERT_CHAR -> {
-                moveCursor(ARROW_RIGHT);
-                deleteChar(false);
-            }
-            case EditorAction.ACTION.INSERT_ROW -> deleteChar(false);
-            case EditorAction.ACTION.DELETE_CHAR -> insertChar(editorAction.key, false);
-            case EditorAction.ACTION.DELETE_ROW -> insertRow(false);
+            case EditorAction.ACTION.INSERT_CHAR -> deleteChar(false, false);
+            case EditorAction.ACTION.INSERT_ROW -> deleteChar(false, false);
+            case EditorAction.ACTION.DELETE_CHAR -> insertChar(editorAction.key, false, false);
+            case EditorAction.ACTION.DELETE_ROW -> insertRow(false, false);
         }
+        editorAction.x = cx;
+        editorAction.y = cy;
+        redoActionHistory.add(editorAction);
+
+        editorUpdateHighlight();
+    }
+
+    private static void redoAction() {
+        if (redoActionHistory.isEmpty()) {
+            return;
+        }
+
+        EditorAction editorAction = redoActionHistory.removeLast();
+        cx = editorAction.x;
+        cy = editorAction.y;
+        switch (editorAction.action) {
+            case EditorAction.ACTION.INSERT_CHAR -> insertChar(editorAction.key, true, false);
+            case EditorAction.ACTION.INSERT_ROW -> insertRow(true, false);
+            case EditorAction.ACTION.DELETE_CHAR -> deleteChar(true, false);
+            case EditorAction.ACTION.DELETE_ROW -> deleteChar(true, false);
+        }
+
         editorUpdateHighlight();
     }
 
@@ -657,6 +692,8 @@ public class Main {
             editorFind();
         } else if (key == ctrl_key('z')) {
             undoAction();
+        } else if (key == ctrl_key('y')) {
+            redoAction();
         } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
             moveCursor(key);
         } else if (key == PAGE_UP || key == PAGE_DOWN) {
@@ -676,18 +713,18 @@ public class Main {
             cx = content.get(cy).length();
         } else if (key == DELETE_KEY) {
             moveCursor(ARROW_RIGHT);
-            deleteChar(true);
+            deleteChar(true, true);
             editorUpdateHighlight();
         } else if (key == '\r') { // enter key
-            insertRow(true);
+            insertRow(true, true);
             editorUpdateHighlight();
         } else if (key == BACKSPACE) {
-            deleteChar(true);
+            deleteChar(true, true);
             editorUpdateHighlight();
         } else if (key == '\033') { // escape key
             // nothing
         } else {
-            insertChar(key, true);
+            insertChar(key, true, true);
             editorUpdateHighlight();
         }
 
@@ -822,6 +859,7 @@ public class Main {
         highlightedContent = new ArrayList<>();
         rowInComment = new ArrayList<>();
         actionHistory = new LinkedList<>();
+        redoActionHistory = new LinkedList<>();
 
         buildStatusMessage();
     }
