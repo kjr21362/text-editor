@@ -6,6 +6,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -38,6 +39,27 @@ class EditorSyntax {
     }
 }
 
+class EditorAction {
+    enum ACTION {
+        INSERT_CHAR,
+        INSERT_ROW,
+        DELETE_CHAR,
+        DELETE_ROW
+    }
+
+    ACTION action;
+    int x;
+    int y;
+    int key;
+
+    public EditorAction(ACTION action, int x, int y, int key) {
+        this.action = action;
+        this.x = x;
+        this.y = y;
+        this.key = key;
+    }
+}
+
 public class Main {
     private static final int ARROW_UP = 1000, ARROW_DOWN = 1001, ARROW_LEFT = 1002, ARROW_RIGHT =
         1003, PAGE_UP = 1004, PAGE_DOWN = 1005, HOME_KEY = 1006, END_KEY = 1007, DELETE_KEY = 1008,
@@ -67,6 +89,7 @@ public class Main {
             "class", "finally", "long", "strictfp", "volatile",
             "const", "float", "native", "super", "while"};
     private static final String SEPARATORS = " ,.()+-/*=~%<>[];";
+    private static final int MAX_ACTION_HISTORY = 20;
 
     private static EditorSyntax[] HLDB =
         {new EditorSyntax("c", C_HL_EXTENSIONS, "//", "/*", "*/", C_HL_KEYWORDS,
@@ -112,6 +135,8 @@ public class Main {
 
     private static List<HIGHLIGHT> savedHighlight;
     private static int savedHighlightLine;
+
+    private static List<EditorAction> actionHistory;
 
     private static String fileName;
 
@@ -483,7 +508,7 @@ public class Main {
         }
     }
 
-    private static void insertChar(int c) {
+    private static void insertChar(int c, boolean addToActionHistory) {
         if (cy == content.size()) {
             content.add("");
             highlightedContent.add(new ArrayList<>());
@@ -495,13 +520,18 @@ public class Main {
         }
         StringBuilder builder = new StringBuilder(row);
         builder.insert(at, (char) c);
-
         content.set(cy, builder.toString());
+
+        if (addToActionHistory) {
+            EditorAction action = new EditorAction(EditorAction.ACTION.INSERT_CHAR, at, cy, 0);
+            addEditorAction(action);
+        }
+
         cx++;
         dirty = true;
     }
 
-    private static void insertRow() {
+    private static void insertRow(boolean addToActionHistory) {
         if (cx == 0) {
             content.add(cy, "");
             highlightedContent.add(cy, new ArrayList<>());
@@ -520,12 +550,18 @@ public class Main {
             cx = 0;
         }
 
+        if (addToActionHistory) {
+            EditorAction action =
+                new EditorAction(EditorAction.ACTION.INSERT_ROW, cx, cy + 1, 0);
+            addEditorAction(action);
+        }
+
         cy++;
         dirty = true;
     }
 
     // deletes the char to the left of cursor
-    private static void deleteChar() {
+    private static void deleteChar(boolean addToActionHistory) {
         if (cy == content.size()) {
             return;
         }
@@ -539,10 +575,16 @@ public class Main {
             if (at < 0 || at >= line.length()) {
                 return;
             }
+            int key = line.charAt(at);
             line = line.substring(0, at) + line.substring(at + 1);
             content.set(cy, line);
             cx--;
             dirty = true;
+            if (addToActionHistory) {
+                EditorAction action =
+                    new EditorAction(EditorAction.ACTION.DELETE_CHAR, cx, cy, key);
+                addEditorAction(action);
+            }
         } else {
             String line = content.get(cy);
             deleteRow(cy);
@@ -550,6 +592,11 @@ public class Main {
             cx = content.get(cy).length();
             content.set(cy, content.get(cy) + line);
             dirty = true;
+            if (addToActionHistory) {
+                EditorAction action =
+                    new EditorAction(EditorAction.ACTION.DELETE_ROW, cx, cy, 0);
+                addEditorAction(action);
+            }
         }
     }
 
@@ -560,6 +607,33 @@ public class Main {
 
         content.remove(at);
         dirty = true;
+    }
+
+    private static void addEditorAction(EditorAction action) {
+        actionHistory.add(action);
+        if (actionHistory.size() > MAX_ACTION_HISTORY) {
+            actionHistory.removeFirst();
+        }
+    }
+
+    private static void undoAction() {
+        if (actionHistory.isEmpty()) {
+            return;
+        }
+
+        EditorAction editorAction = actionHistory.removeLast();
+        cx = editorAction.x;
+        cy = editorAction.y;
+        switch (editorAction.action) {
+            case EditorAction.ACTION.INSERT_CHAR -> {
+                moveCursor(ARROW_RIGHT);
+                deleteChar(false);
+            }
+            case EditorAction.ACTION.INSERT_ROW -> deleteChar(false);
+            case EditorAction.ACTION.DELETE_CHAR -> insertChar(editorAction.key, false);
+            case EditorAction.ACTION.DELETE_ROW -> insertRow(false);
+        }
+        editorUpdateHighlight();
     }
 
     private static void handleKey(int key) {
@@ -581,6 +655,8 @@ public class Main {
             return;
         } else if (key == ctrl_key('f')) {
             editorFind();
+        } else if (key == ctrl_key('z')) {
+            undoAction();
         } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT).contains(key)) {
             moveCursor(key);
         } else if (key == PAGE_UP || key == PAGE_DOWN) {
@@ -600,18 +676,18 @@ public class Main {
             cx = content.get(cy).length();
         } else if (key == DELETE_KEY) {
             moveCursor(ARROW_RIGHT);
-            deleteChar();
+            deleteChar(true);
             editorUpdateHighlight();
         } else if (key == '\r') { // enter key
-            insertRow();
+            insertRow(true);
             editorUpdateHighlight();
         } else if (key == BACKSPACE) {
-            deleteChar();
+            deleteChar(true);
             editorUpdateHighlight();
         } else if (key == '\033') { // escape key
             // nothing
         } else {
-            insertChar(key);
+            insertChar(key, true);
             editorUpdateHighlight();
         }
 
@@ -745,6 +821,7 @@ public class Main {
         content = new ArrayList<>();
         highlightedContent = new ArrayList<>();
         rowInComment = new ArrayList<>();
+        actionHistory = new LinkedList<>();
 
         buildStatusMessage();
     }
