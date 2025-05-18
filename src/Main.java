@@ -545,12 +545,18 @@ public class Main {
         } else if (cx == content.get(cy).length()) {
             content.add(cy + 1, "");
             highlightedContent.add(cy + 1, new ArrayList<>());
+            if(rowInComment.size() < (cy + 1)){
+                rowInComment.add(false);
+            }
             rowInComment.add(cy + 1, false);
             cx = 0;
         } else {
             String line = content.get(cy);
             content.add(cy + 1, line.substring(cx));
             highlightedContent.add(cy + 1, new ArrayList<>());
+            if(rowInComment.size() < (cy + 1)){
+                rowInComment.add(false);
+            }
             rowInComment.add(cy + 1, false);
             content.set(cy, line.substring(0, cx));
             cx = 0;
